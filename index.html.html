@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Status de Gravação e Transmissão</title>
+    <style>
+        body {
+            margin: 0;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            color: white;
+            font-family: Arial, sans-serif;
+            text-align: center;
+            overflow: hidden; /* Evita rolagem */
+        }
+        .container {
+            display: flex;
+            flex-wrap: wrap;
+            width: 100%;
+            height: 100%;
+        }
+        .status-panel {
+            flex: 1 1 50%; /* Divide a tela em 4 partes iguais */
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            font-size: 1.5em;
+            font-weight: bold;
+            color: white; /* Texto sempre em branco */
+            box-sizing: border-box;
+            padding: 20px;
+        }
+        .panel-title {
+            font-size: 1.2em;
+            margin-bottom: 0.5em;
+        }
+        .recording-panel, .streaming-panel {
+            background-color: gray;
+            width: 100%;
+            height: 100%;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div id="recording1" class="status-panel">
+            <div class="panel-title">Gravação Estúdio 1</div>
+            <div class="status-text">
+                <!-- Status de gravação do Estúdio 1 será inserido aqui pelo JavaScript -->
+            </div>
+        </div>
+        <div id="streaming1" class="status-panel">
+            <div class="panel-title">Transmissão Estúdio 1</div>
+            <div class="status-text">
+                <!-- Status de transmissão do Estúdio 1 será inserido aqui pelo JavaScript -->
+            </div>
+        </div>
+        <div id="recording2" class="status-panel">
+            <div class="panel-title">Gravação Estúdio 2</div>
+            <div class="status-text">
+                <!-- Status de gravação do Estúdio 2 será inserido aqui pelo JavaScript -->
+            </div>
+        </div>
+        <div id="streaming2" class="status-panel">
+            <div class="panel-title">Transmissão Estúdio 2</div>
+            <div class="status-text">
+                <!-- Status de transmissão do Estúdio 2 será inserido aqui pelo JavaScript -->
+            </div>
+        </div>
+    </div>
+    <script>
+        const ip1 = 'http://192.168.31.80:8088/api/';
+        const ip2 = 'http://192.168.31.81:8088/api/'; // Substitua pelo segundo IP
+
+        let previousStatuses = {};
+
+        // Função para converter segundos em formato hh:mm:ss
+        function formatTime(seconds) {
+            const hours = Math.floor(seconds / 3600);
+            const minutes = Math.floor((seconds % 3600) / 60);
+            const secs = seconds % 60;
+            return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+        }
+
+        function fetchStatus(ip, recordingPanelId, streamingPanelId) {
+            return fetch(ip)
+                .then(response => response.text())
+                .then(data => {
+                    let parser = new DOMParser();
+                    let xmlDoc = parser.parseFromString(data, 'application/xml');
+
+                    let recordingElement = xmlDoc.querySelector('recording');
+                    let streamingElement = xmlDoc.querySelector('streaming');
+
+                    // Verifica se os elementos de gravação e streaming estão presentes
+                    let isRecording = recordingElement ? recordingElement.textContent.trim() === 'True' : false;
+                    let isStreaming = streamingElement ? streamingElement.textContent.trim() === 'True' : false;
+                    
+                    // Inicializa o tempo de gravação como 0
+                    let recordingTime = 0;
+
+                    if (recordingElement) {
+                        // Extrai o tempo de gravação do atributo duration
+                        let durationAttr = recordingElement.getAttribute('duration');
+                        recordingTime = durationAttr ? parseInt(durationAttr, 10) : 0;
+                    }
+
+                    // Define o status para o painel de gravação
+                    let recordingBackgroundColor = isRecording ? 'red' : (isStreaming ? 'orange' : 'green');
+                    let recordingStatusText = isRecording ? `• Gravando ${formatTime(recordingTime)}` : (isStreaming ? 'Em pausa' : 'Estúdio Livre');
+
+                    document.getElementById(recordingPanelId).style.backgroundColor = recordingBackgroundColor;
+                    document.querySelector(`#${recordingPanelId} .status-text`).textContent = recordingStatusText;
+                    document.getElementById(recordingPanelId).style.color = 'white'; // Texto sempre em branco
+
+                    // Define o status para o painel de transmissão
+                    if (isStreaming) {
+                        let streamingBackgroundColor = 'blue';
+                        let streamingStatusText = '• Transmitindo';
+
+                        document.getElementById(streamingPanelId).style.backgroundColor = streamingBackgroundColor;
+                        document.querySelector(`#${streamingPanelId} .status-text`).textContent = streamingStatusText;
+
+                        document.getElementById(streamingPanelId).style.color = 'white'; // Texto sempre em branco
+                        document.getElementById(streamingPanelId).style.display = 'flex';
+                    } else {
+                        document.getElementById(streamingPanelId).style.display = 'none';
+                    }
+
+                    // Check for status change
+                    let newStatus = {
+                        isRecording: isRecording,
+                        isStreaming: isStreaming,
+                        recordingTime: recordingTime
+                    };
+
+                    let previousStatus = previousStatuses[ip] || {};
+
+                    if (JSON.stringify(previousStatus) !== JSON.stringify(newStatus)) {
+                        previousStatuses[ip] = newStatus;
+                    }
+                })
+                .catch(error => {
+                    console.error(`Erro ao buscar os dados do IP ${ip}:`, error);
+                    // Define o painel de gravação como cinza e o texto como "Estúdio Livre" em caso de erro
+                    document.getElementById(recordingPanelId).style.backgroundColor = 'gray';
+                    document.querySelector(`#${recordingPanelId} .status-text`).textContent = 'Estúdio Livre';
+                    document.getElementById(recordingPanelId).style.color = 'white'; // Texto sempre em branco
+
+                    // Oculta o painel de transmissão em caso de erro
+                    document.getElementById(streamingPanelId).style.display = 'none';
+                });
+        }
+
+        function updateStatus() {
+            // Atualiza o status para os dois IPs e os quatro painéis
+            fetchStatus(ip1, 'recording1', 'streaming1');
+            fetchStatus(ip2, 'recording2', 'streaming2');
+        }
+
+        // Atualiza o status a cada 3 segundos
+        setInterval(updateStatus, 3000);
+
+        // Atualiza o status imediatamente ao carregar a página
+        window.onload = updateStatus;
+    </script>
+</body>
+</html>
